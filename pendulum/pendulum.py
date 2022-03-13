@@ -1,5 +1,7 @@
 import pybullet as p
 import time
+from scipy.integrate import odeint
+import math
 
 IS_GUI = False
 # physical params
@@ -24,6 +26,12 @@ else:
 p.setGravity(0, 0, -g)
 bodyId = p.loadURDF("./pendulum.urdf")
 
+# turn off link damping
+p.changeDynamics(bodyUniqueId=bodyId,
+                linkIndex=jIdx,
+                linearDamping=0)
+
+# go to initial pose
 p.setJointMotorControl2(bodyIndex = bodyId,
                         jointIndex = jIdx,
                         targetPosition = q0,
@@ -31,6 +39,7 @@ p.setJointMotorControl2(bodyIndex = bodyId,
 for _ in range(1000):
     p.stepSimulation()
 
+# turn off control torque for free fall
 p.setJointMotorControl2(bodyIndex = bodyId,
                         jointIndex = jIdx,
                         controlMode = p.VELOCITY_CONTROL,
@@ -48,7 +57,17 @@ while t <= maxTime:
         time.sleep(dt)
 p.disconnect()
 
+# right part of the pendulum DE
+def rp(x, t):
+    return [x[1], -g/L*math.sin(x[0])]
+
+# integrate pendulum DE
+Y = odeint(rp,[q0, 0], log_time)
+log_de = Y[:,0]
+
+# show plots
 import matplotlib.pyplot as plt
 plt.plot(log_time, log_pos)
 plt.grid(True)
+plt.plot(log_time, log_de)
 plt.show()
