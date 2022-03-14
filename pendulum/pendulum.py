@@ -2,6 +2,8 @@ import pybullet as p
 import time
 from scipy.integrate import odeint
 import math
+import copy
+import numpy as np
 
 IS_GUI = False
 # physical params
@@ -14,9 +16,6 @@ maxTime = 10
 t = 0
 # joint index
 jIdx = 1
-# containters for logging and plots
-log_time = [t]
-log_pos = [q0]
 
 if (IS_GUI):
     physicsClient = p.connect(p.GUI)
@@ -38,6 +37,14 @@ p.setJointMotorControl2(bodyIndex = bodyId,
                         controlMode = p.POSITION_CONTROL)
 for _ in range(1000):
     p.stepSimulation()
+
+# compare initial state
+q0_fact = p.getJointState(bodyId, jIdx)[0]
+print(f'q0 error: {q0 - q0_fact}')
+
+# containters for logging and plots
+log_time = [t]
+log_pos = [q0_fact]
 
 # turn off control torque for free fall
 p.setJointMotorControl2(bodyIndex = bodyId,
@@ -61,13 +68,46 @@ p.disconnect()
 def rp(x, t):
     return [x[1], -g/L*math.sin(x[0])]
 
+def symp_euler(fun, x0, TT):
+    x1 = copy.copy(x0)
+    xx = np.array(x1)
+    for i in range(len(TT)-1):
+        dt = (TT[i+1] - TT[i])
+        x1[1] += rp(x1, 0)[1]*dt
+        x1[0] += x1[1]*dt
+        xx = np.vstack((xx,x1))
+    return xx
+
 # integrate pendulum DE
 Y = odeint(rp,[q0, 0], log_time)
 log_de = Y[:,0]
+
+log_euler = symp_euler(rp, [q0, 0], log_time)
+log_euler = log_euler[:,0]
+
+def cost(q_exp, q_theor):
+    l2 = 0
+    sz = len(q_exp)
+    linf = abs(q_exp[0] - q_theor[0])
+    for i in range(sz):
+        err = abs(q_exp[i] - q_theor[i])
+        if (err > linf):
+            linf = err
+        l2 += err**2
+    l2 = math.sqrt(l2)
+    return (l2, linf)
+
+(l2, linf) = cost(log_pos, log_de)
+print(f'l2 odeint = {l2}')
+print(f'linf odeint = {linf}')
+
+(l2, linf) = cost(log_pos, log_euler)
+print(f'l2 euler = {l2}')
+print(f'linf euler = {linf}')
 
 # show plots
 import matplotlib.pyplot as plt
 plt.plot(log_time, log_pos)
 plt.grid(True)
-plt.plot(log_time, log_de)
+plt.plot(log_time, log_euler)
 plt.show()
