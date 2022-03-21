@@ -16,7 +16,7 @@ m = 1
 kf = 1
 a = g/L
 b = kf/(m*L*L)
-q0 = 0.78
+q0 = 0
 maxTime = 10
 t = 0
 # joint index
@@ -61,7 +61,16 @@ p.setJointMotorControl2(bodyIndex = bodyId,
 while t <= maxTime:
     p.stepSimulation()
     pos = p.getJointState(bodyId, jIdx)[0]
+    vel = p.getJointState(bodyId, jIdx)[1]
     t += dt
+    kp = 4
+    kv = 4
+    u = -kp*(pos-0.1)-kv*vel
+    p.setJointMotorControl2(bodyIndex = bodyId,
+                        jointIndex = jIdx,
+                        controlMode = p.TORQUE_CONTROL,
+                        force = u)
+
     # TODO switch to preallocated indexing
     # log_pos[idx] = pos
     log_pos.append(pos)
@@ -70,65 +79,8 @@ while t <= maxTime:
         time.sleep(dt)
 p.disconnect()
 
-# right part of the pendulum DE
-# def rp(x, t):
-#     return [x[1], -g/L*math.sin(x[0]) - kf/(m*L*L)*x[1]]
-
-def rp(x, t, a, b):
-    return [x[1], -a*math.sin(x[0]) - b*x[1]]
-
-def symp_euler(fun, x0, TT, a, b):
-    x1 = copy.copy(x0)
-    xx = np.array(x1)
-    for i in range(len(TT)-1):
-        dt = (TT[i+1] - TT[i])
-        x1[1] += rp(x1, 0, a, b)[1]*dt
-        x1[0] += x1[1]*dt
-        xx = np.vstack((xx,x1))
-    return xx
-
-def cost(q_exp, q_theor):
-    l2 = 0
-    sz = len(q_exp)
-    linf = abs(q_exp[0] - q_theor[0])
-    for i in range(sz):
-        err = abs(q_exp[i] - q_theor[i])
-        if (err > linf):
-            linf = err
-        l2 += err**2
-    l2 = math.sqrt(l2)
-    return (l2, linf)
-
-def l2_cost(k):
-    x = symp_euler(rp, pos0, log_time, k[0], k[1])
-    return cost(log_pos, x[:,0])[0]
-
-# integrate pendulum DE
-# Y = odeint(rp,pos0, log_time, args=(a, b))
-# log_de = Y[:,0]
-a = random()*100
-b = random()*10
-res = minimize(l2_cost, [a, b])
-print(f'l2_res: {res.fun}')
-print(f'k: {res.x}')
-print(f'k_th: {[a,b]}')
-a = res.x[0]
-b = res.x[1]
-log_euler = symp_euler(rp, pos0, log_time, a, b)
-log_euler = log_euler[:,0]
-
-# (l2, linf) = cost(log_pos, log_de)
-# print(f'l2 odeint = {l2}')
-# print(f'linf odeint = {linf}')
-
-(l2, linf) = cost(log_pos, log_euler)
-print(f'l2 euler = {l2}')
-print(f'linf euler = {linf}')
-
 # show plots
 import matplotlib.pyplot as plt
 plt.plot(log_time, log_pos, label='sim')
 plt.grid(True)
-plt.plot(log_time, log_euler, label='theor')
-plt.legend()
 plt.show()
