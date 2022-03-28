@@ -62,6 +62,12 @@ while t <= maxTime:
     p.stepSimulation()
     pos = p.getJointState(bodyId, jIdx)[0]
     t += dt
+
+    p.setJointMotorControl2(bodyIndex = bodyId,
+                        jointIndex = jIdx,
+                        controlMode = p.TORQUE_CONTROL,
+                        force = 0.1)
+
     # TODO switch to preallocated indexing
     # log_pos[idx] = pos
     log_pos.append(pos)
@@ -75,7 +81,7 @@ p.disconnect()
 #     return [x[1], -g/L*math.sin(x[0]) - kf/(m*L*L)*x[1]]
 
 def rp(x, t, a, b):
-    return [x[1], -a*math.sin(x[0]) - b*x[1]]
+    return [x[1], -a*math.sin(x[0]) - b*x[1] + (1/(m*L*L))*0.1]
 
 def symp_euler(fun, x0, TT, a, b):
     x1 = copy.copy(x0)
