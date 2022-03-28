@@ -16,7 +16,8 @@ m = 1
 kf = 1
 a = g/L
 b = kf/(m*L*L)
-q0 = 0
+q0 = 0.1
+pos_d = 0
 maxTime = 10
 t = 0
 # joint index
@@ -45,6 +46,7 @@ for _ in range(1000):
 
 # compare initial state
 q0_fact = p.getJointState(bodyId, jIdx)[0]
+print(f'q0 fact: {q0_fact}')
 print(f'q0 error: {q0 - q0_fact}')
 pos0 = [q0_fact, 0]
 
@@ -58,14 +60,19 @@ p.setJointMotorControl2(bodyIndex = bodyId,
                         controlMode = p.VELOCITY_CONTROL,
                         targetVelocity = 0,
                         force = 0)
+e_int = 0
 while t <= maxTime:
     p.stepSimulation()
     pos = p.getJointState(bodyId, jIdx)[0]
     vel = p.getJointState(bodyId, jIdx)[1]
     t += dt
-    kp = 4
-    kv = 4
-    u = -kp*(pos-0.1)-kv*vel
+    kp = 50
+    kv = 10
+    ki = 80
+    e = pos - pos_d
+    e_int += e*dt
+    # u = -kp*e - kv*vel - ki*e_int
+    u = -kp*e - kv*vel
     p.setJointMotorControl2(bodyIndex = bodyId,
                         jointIndex = jIdx,
                         controlMode = p.TORQUE_CONTROL,
@@ -83,4 +90,5 @@ p.disconnect()
 import matplotlib.pyplot as plt
 plt.plot(log_time, log_pos, label='sim')
 plt.grid(True)
+plt.plot([0,maxTime],[pos_d, pos_d], label="reference")
 plt.show()
