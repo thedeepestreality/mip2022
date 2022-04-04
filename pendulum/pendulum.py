@@ -6,7 +6,7 @@ import copy
 import numpy as np
 from scipy.optimize import minimize
 from random import random
-#import control.matlab
+from control.matlab import place
 
 IS_GUI = False
 # physical params
@@ -17,8 +17,8 @@ m = 1
 kf = 1
 a = g/L
 b = kf/(m*L*L)
-q0 = 0.1
-pos_d = 0
+q0 = math.pi-0.1
+pos_d = math.pi
 maxTime = 10
 t = 0
 # joint index
