@@ -6,27 +6,19 @@ import copy
 import numpy as np
 from scipy.optimize import minimize
 from random import random
-from control.matlab import place
 
 IS_GUI = False
 # physical params
 dt = 1/240
-g = 10
-L = 0.8
-m = 1
-kf = 1
-a = g/L
-b = kf/(m*L*L)
+
 q0 = math.pi-0.1
 pos_d = math.pi
 maxTime = 10
 t = 0
 # joint index
 jIdx = 1
-
-A = np.array([[0, 1],
-            [-a, -b]])
-B = np.array([0, 1/(m*L*L)])
+g = 10
+K = np.array([[-136.,   -19.1]])
 
 if (IS_GUI):
     physicsClient = p.connect(p.GUI)
@@ -71,13 +63,13 @@ while t <= maxTime:
     pos = p.getJointState(bodyId, jIdx)[0]
     vel = p.getJointState(bodyId, jIdx)[1]
     t += dt
-    kp = 50
-    kv = 10
+    kp = -K[0,0]
+    kv = -K[0,1]
     ki = 80
     e = pos - pos_d
     e_int += e*dt
     # u = -kp*e - kv*vel - ki*e_int
-    u = -kp*e - kv*vel
+    u = -kp*e -kv*vel
     p.setJointMotorControl2(bodyIndex = bodyId,
                         jointIndex = jIdx,
                         controlMode = p.TORQUE_CONTROL,
