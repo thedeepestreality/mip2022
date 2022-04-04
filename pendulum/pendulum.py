@@ -6,6 +6,7 @@ import copy
 import numpy as np
 from scipy.optimize import minimize
 from random import random
+#import control.matlab
 
 IS_GUI = False
 # physical params
@@ -22,6 +23,10 @@ maxTime = 10
 t = 0
 # joint index
 jIdx = 1
+
+A = np.array([[0, 1],
+            [-a, -b]])
+B = np.array([0, 1/(m*L*L)])
 
 if (IS_GUI):
     physicsClient = p.connect(p.GUI)
