@@ -10,15 +10,21 @@ from random import random
 IS_GUI = False
 # physical params
 dt = 1/240
-
-q0 = math.pi-0.1
-pos_d = math.pi
-maxTime = 10
+q0 = 0
+pos_d = math.pi/2
+maxTime = 5
 t = 0
 # joint index
 jIdx = 1
 g = 10
-K = np.array([[-136.,   -19.1]])
+L = 0.8
+m = 1
+kf = 0.1
+a = g/L
+c = m*L*L
+b = kf/c
+
+K = np.array([[200,  30]])
 
 if (IS_GUI):
     physicsClient = p.connect(p.GUI)
@@ -47,9 +53,25 @@ print(f'q0 fact: {q0_fact}')
 print(f'q0 error: {q0 - q0_fact}')
 pos0 = [q0_fact, 0]
 
+kp = K[0,0]
+kv = K[0,1]
+ki = 80
+
+# u = K@X
+def ctrl_static(pos, vel):
+    return -kp*(pos-pos_d) - kv*vel
+
+def feedback_lin(pos, vel,t):
+	u_nonlin = (a*math.sin(pos)+b*vel)*c
+	u_lin = -kp*(pos-pos_d)-kv*vel
+	return u_nonlin + u_lin
+
 # containters for logging and plots
 log_time = [t]
 log_pos = [q0_fact]
+log_vel= [0]
+log_ctrl = []
+u = 0
 
 # turn off control torque for free fall
 p.setJointMotorControl2(bodyIndex = bodyId,
@@ -59,25 +81,27 @@ p.setJointMotorControl2(bodyIndex = bodyId,
                         force = 0)
 e_int = 0
 while t <= maxTime:
-    p.stepSimulation()
     pos = p.getJointState(bodyId, jIdx)[0]
     vel = p.getJointState(bodyId, jIdx)[1]
-    t += dt
-    kp = -K[0,0]
-    kv = -K[0,1]
-    ki = 80
-    e = pos - pos_d
-    e_int += e*dt
+    
+	# PID-regulator
+    # e = pos - pos_d
+    # e_int += e*dt
     # u = -kp*e - kv*vel - ki*e_int
-    u = -kp*e -kv*vel
+
+    # u = ctrl_static(pos, vel)
+    u = feedback_lin(pos, vel, t)
     p.setJointMotorControl2(bodyIndex = bodyId,
                         jointIndex = jIdx,
                         controlMode = p.TORQUE_CONTROL,
                         force = u)
-
+    p.stepSimulation()
+    t += dt
     # TODO switch to preallocated indexing
     # log_pos[idx] = pos
     log_pos.append(pos)
+    log_vel.append(vel)
+    log_ctrl.append(u)
     log_time.append(t)
     if (IS_GUI):
         time.sleep(dt)
@@ -85,7 +109,21 @@ p.disconnect()
 
 # show plots
 import matplotlib.pyplot as plt
-plt.plot(log_time, log_pos, label='sim')
+
+# position plot
+plt.subplot(3,1,1)
+plt.plot(log_time, log_pos, label='sim_pos')
 plt.grid(True)
 plt.plot([0,maxTime],[pos_d, pos_d], label="reference")
+
+# velocity plot
+plt.subplot(3,1,2)
+plt.plot(log_time, log_vel, label='sim_vel')
+plt.grid(True)
+
+# control plot
+plt.subplot(3,1,3)
+plt.plot(log_time[0:-1], log_ctrl, label='control')
+plt.grid(True)
+
 plt.show()
