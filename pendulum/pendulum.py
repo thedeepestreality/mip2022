@@ -7,7 +7,7 @@ import numpy as np
 from scipy.optimize import minimize
 from random import random
 
-IS_GUI = False
+IS_GUI = True
 # physical params
 dt = 1/240
 q0 = 0
@@ -25,7 +25,7 @@ c = m*L*L
 b = kf/c
 
 K = np.array([[200,  30]])
-
+(mx,mv,vx) = (-52.921769241021074, -10.326402285952112, -128.06248474865563)
 if (IS_GUI):
     physicsClient = p.connect(p.GUI)
 else:
@@ -66,6 +66,12 @@ def feedback_lin(pos, vel,t):
 	u_lin = -kp*(pos-pos_d)-kv*vel
 	return u_nonlin + u_lin
 
+glob = {"prev_vel": 0}
+def feedback_ast(pos, vel):
+    dv = (vel - glob["prev_vel"])/dt
+    glob["prev_vel"] = vel
+    return mx*vel + mv*dv + vx*(pos-pos_d)
+
 # containters for logging and plots
 log_time = [t]
 log_pos = [q0_fact]
@@ -90,7 +96,9 @@ while t <= maxTime:
     # u = -kp*e - kv*vel - ki*e_int
 
     # u = ctrl_static(pos, vel)
-    u = feedback_lin(pos, vel, t)
+    # u = feedback_lin(pos, vel, t)
+    du = feedback_ast(pos, vel)
+    u += du*dt
     p.setJointMotorControl2(bodyIndex = bodyId,
                         jointIndex = jIdx,
                         controlMode = p.TORQUE_CONTROL,
