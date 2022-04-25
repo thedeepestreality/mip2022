@@ -7,11 +7,13 @@ import numpy as np
 from scipy.optimize import minimize
 from random import random
 
-IS_GUI = True
+IS_GUI = False
+OWN_REG = True
 # physical params
 dt = 1/240
 q0 = 0
 pos_d = math.pi/2
+trajTime = 4
 maxTime = 5
 t = 0
 # joint index
@@ -24,7 +26,7 @@ a = g/L
 c = m*L*L
 b = kf/c
 
-K = np.array([[200,  30]])
+K = np.array([[1600,  120]])
 (mx,mv,vx) = (-52.921769241021074, -10.326402285952112, -128.06248474865563)
 if (IS_GUI):
     physicsClient = p.connect(p.GUI)
@@ -61,10 +63,20 @@ ki = 80
 def ctrl_static(pos, vel):
     return -kp*(pos-pos_d) - kv*vel
 
-def feedback_lin(pos, vel,t):
-	u_nonlin = (a*math.sin(pos)+b*vel)*c
-	u_lin = -kp*(pos-pos_d)-kv*vel
-	return u_nonlin + u_lin
+def feedback_lin(pos, vel, pos_d, vel_d, ff_acc):
+    u_nonlin = a*math.sin(pos)+b*vel
+    u_lin = ff_acc - kp*(pos-pos_d) - kv*(vel-vel_d)
+    return c*(u_nonlin + u_lin)
+
+def lin_param(pos_0, pos_d, T, t):
+    return (pos_0 + t*(pos_d-pos_0)/T, (pos_d-pos_0)/T, 0) if (t <= T) else (pos_d, 0, 0)
+
+def cubic_param(pos_0, pos_d, T, t):
+    a2 = 3/T**2
+    a3 = -2/T**3
+    s = a2*t**2 + a3*t**3
+    diff = pos_d-pos_0
+    return ((pos_0 + s*diff), diff*(2*a2*t+3*a3*t**2), diff*(2*a2+6*a3*t)) if (t <= T) else (pos_d,0,0)
 
 glob = {"prev_vel": 0}
 def feedback_ast(pos, vel):
@@ -75,17 +87,24 @@ def feedback_ast(pos, vel):
 # containters for logging and plots
 log_time = [t]
 log_pos = [q0_fact]
+log_pos_d = [q0_fact]
 log_vel= [0]
+log_vel_d = [0]
+log_acc = [0]
+log_acc_d = [0]
 log_ctrl = []
 u = 0
 
-# turn off control torque for free fall
-p.setJointMotorControl2(bodyIndex = bodyId,
-                        jointIndex = jIdx,
-                        controlMode = p.VELOCITY_CONTROL,
-                        targetVelocity = 0,
-                        force = 0)
+if (OWN_REG):
+    # turn off control torque for free fall
+    p.setJointMotorControl2(bodyIndex = bodyId,
+                            jointIndex = jIdx,
+                            controlMode = p.VELOCITY_CONTROL,
+                            targetVelocity = 0,
+                            force = 0)
 e_int = 0
+prev_vel = 0
+
 while t <= maxTime:
     pos = p.getJointState(bodyId, jIdx)[0]
     vel = p.getJointState(bodyId, jIdx)[1]
@@ -96,19 +115,36 @@ while t <= maxTime:
     # u = -kp*e - kv*vel - ki*e_int
 
     # u = ctrl_static(pos, vel)
-    # u = feedback_lin(pos, vel, t)
-    du = feedback_ast(pos, vel)
-    u += du*dt
-    p.setJointMotorControl2(bodyIndex = bodyId,
-                        jointIndex = jIdx,
-                        controlMode = p.TORQUE_CONTROL,
-                        force = u)
+    # u = feedback_lin(pos, vel, lin_param(q0_fact, pos_d, trajTime, t))
+
+    # (curr_pos_d, curr_vel_d, curr_acc_d) = lin_param(q0_fact, pos_d, trajTime, t)
+    (curr_pos_d, curr_vel_d, curr_acc_d) = cubic_param(q0_fact, pos_d, trajTime, t)
+    u = feedback_lin(pos, vel, curr_pos_d, curr_vel_d, curr_acc_d)
+
+    # du = feedback_ast(pos, vel)
+    # u += du*dt
+    if (OWN_REG):
+        p.setJointMotorControl2(bodyIndex = bodyId,
+                            jointIndex = jIdx,
+                            controlMode = p.TORQUE_CONTROL,
+                            force = u)
+    else:
+        p.setJointMotorControl2(bodyIndex = bodyId,
+                            jointIndex = jIdx,
+                            targetPosition = curr_pos_d,
+                            controlMode = p.POSITION_CONTROL)
+
     p.stepSimulation()
     t += dt
     # TODO switch to preallocated indexing
     # log_pos[idx] = pos
     log_pos.append(pos)
     log_vel.append(vel)
+    log_acc.append((vel-prev_vel)/dt)
+    log_pos_d.append(curr_pos_d)
+    log_vel_d.append(curr_vel_d)
+    log_acc_d.append(curr_acc_d)
+    prev_vel = vel
     log_ctrl.append(u)
     log_time.append(t)
     if (IS_GUI):
@@ -119,19 +155,30 @@ p.disconnect()
 import matplotlib.pyplot as plt
 
 # position plot
-plt.subplot(3,1,1)
+plt.subplot(4,1,1)
 plt.plot(log_time, log_pos, label='sim_pos')
+plt.plot(log_time, log_pos_d, label='ref_pos')
 plt.grid(True)
-plt.plot([0,maxTime],[pos_d, pos_d], label="reference")
+plt.legend()
 
 # velocity plot
-plt.subplot(3,1,2)
+plt.subplot(4,1,2)
 plt.plot(log_time, log_vel, label='sim_vel')
+plt.plot(log_time, log_vel_d, label='ref_vel')
 plt.grid(True)
+plt.legend()
+
+# acceleration plot
+plt.subplot(4,1,3)
+plt.plot(log_time, log_acc, label='sim_acc')
+plt.plot(log_time, log_acc_d, label='ref_acc')
+plt.grid(True)
+plt.legend()
 
 # control plot
-plt.subplot(3,1,3)
+plt.subplot(4,1,4)
 plt.plot(log_time[0:-1], log_ctrl, label='control')
 plt.grid(True)
+plt.legend()
 
 plt.show()
